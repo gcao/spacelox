@@ -1108,7 +1108,7 @@ impl<'a, I: Io> VmExecutor<'a, I> {
       ArityKind::Fixed(arity) => {
         if arg_count != arity {
           return Some(self.runtime_error(&format!(
-            "Function {} expected {} argument(s) but got {}.",
+            "{} expected {} argument(s) but got {}.",
             name(),
             arity,
             arg_count,
@@ -1119,9 +1119,28 @@ impl<'a, I: Io> VmExecutor<'a, I> {
       ArityKind::Variadic(arity) => {
         if arg_count < arity {
           return Some(self.runtime_error(&format!(
-            "Function {} expected at least {} argument(s) but got {}.",
+            "{} expected at least {} argument(s) but got {}.",
             name(),
             arity,
+            arg_count,
+          )));
+        }
+      }
+      // if defaulted we need between the min and max
+      ArityKind::Default(min_arity, max_arity) => {
+        if arg_count < min_arity {
+          return Some(self.runtime_error(&format!(
+            "{} expected at least {} argument(s) but got {}.",
+            name(),
+            min_arity,
+            arg_count,
+          )));
+        }
+        if arg_count > max_arity {
+          return Some(self.runtime_error(&format!(
+            "{} expected at most {} argument(s) but got {}.",
+            name(),
+            max_arity,
             arg_count,
           )));
         }

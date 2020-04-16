@@ -367,7 +367,7 @@ impl fmt::Display for Value {
           .iter()
           .map(|(key, value)| format!("{}: {}", key, value))
           .collect();
-        write!(f, "{{{}}}", strings.join(", "))
+        write!(f, "{{ {} }}", strings.join(", "))
       }
       Self::Fun(fun) => write!(f, "{}", fun),
       Self::Upvalue(upvalue) => match &**upvalue {
@@ -660,6 +660,7 @@ pub enum FunKind {
 pub enum ArityKind {
   Fixed(u8),
   Variadic(u8),
+  Default(u8, u8),
 }
 
 #[derive(PartialEq, Clone)]
