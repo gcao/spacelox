@@ -1,4 +1,4 @@
-use spacelox_vm::vm::{default_native_vm, Interpret};
+use spacelox_vm::vm::{default_native_vm, ExecuteResult};
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ fn fixture_path(fixture_path: &str) -> Option<PathBuf> {
     .and_then(|path| Some(path.join("fixture").join(fixture_path)))
 }
 
-fn test_files(paths: &[&str], result: Interpret) -> Result<(), std::io::Error> {
+fn test_files(paths: &[&str], result: ExecuteResult) -> Result<(), std::io::Error> {
   for path in paths {
     let mut vm = default_native_vm();
 
@@ -47,7 +47,7 @@ fn clock() -> Result<(), std::io::Error> {
   let mut source = String::new();
   file.read_to_string(&mut source)?;
 
-  assert_eq!(vm.run(&source), Interpret::Ok);
+  assert_eq!(vm.run(&source), ExecuteResult::Ok);
   Ok(())
 }
 
@@ -61,7 +61,7 @@ fn assert() -> Result<(), std::io::Error> {
   let mut source = String::new();
   file.read_to_string(&mut source)?;
 
-  assert_eq!(vm.run(&source), Interpret::Ok);
+  assert_eq!(vm.run(&source), ExecuteResult::Ok);
   Ok(())
 }
 
@@ -74,7 +74,7 @@ fn assert_eq() -> Result<(), std::io::Error> {
   let mut source = String::new();
   file.read_to_string(&mut source)?;
 
-  assert_eq!(vm.run(&source), Interpret::Ok);
+  assert_eq!(vm.run(&source), ExecuteResult::Ok);
   Ok(())
 }
 
@@ -87,7 +87,7 @@ fn assert_ne() -> Result<(), std::io::Error> {
   let mut source = String::new();
   file.read_to_string(&mut source)?;
 
-  assert_eq!(vm.run(&source), Interpret::Ok);
+  assert_eq!(vm.run(&source), ExecuteResult::Ok);
   Ok(())
 }
 
@@ -100,7 +100,7 @@ fn assignment() -> Result<(), std::io::Error> {
       "assignment/local.lox",
       "assignment/syntax.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -110,20 +110,20 @@ fn assignment() -> Result<(), std::io::Error> {
       "assignment/prefix_operator.lox",
       "assignment/to_this.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec!["assignment/undefined.lox"], Interpret::RuntimeError)
+  test_files(&vec!["assignment/undefined.lox"], ExecuteResult::RuntimeError)
 }
 
 #[test]
 fn block() -> Result<(), std::io::Error> {
-  test_files(&vec!["block/empty.lox", "block/empty.lox"], Interpret::Ok)
+  test_files(&vec!["block/empty.lox", "block/empty.lox"], ExecuteResult::Ok)
 }
 
 #[test]
 fn bool() -> Result<(), std::io::Error> {
-  test_files(&vec!["bool/equality.lox", "bool/not.lox"], Interpret::Ok)
+  test_files(&vec!["bool/equality.lox", "bool/not.lox"], ExecuteResult::Ok)
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn call() -> Result<(), std::io::Error> {
       "call/object.lox",
       "call/string.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
@@ -150,15 +150,15 @@ fn class() -> Result<(), std::io::Error> {
       "class/local_reference_self.lox",
       "class/reference_self.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
     &vec!["class/inherit_self.lox", "class/local_inherit_self.lox"],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -179,12 +179,12 @@ fn closure() -> Result<(), std::io::Error> {
       "closure/unused_closure.lox",
       "closure/unused_later_closure.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn comments() -> Result<(), std::io::Error> {
       "comments/only_line_comment.lox",
       "comments/unicode.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )
 }
 
@@ -211,12 +211,12 @@ fn constructor() -> Result<(), std::io::Error> {
       "constructor/early_return.lox",
       "constructor/return_in_nested_function.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
     &vec!["constructor/return_value.lox"],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
   test_files(
@@ -225,17 +225,17 @@ fn constructor() -> Result<(), std::io::Error> {
       "constructor/extra_arguments.lox",
       "constructor/missing_arguments.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
 #[test]
 fn expressions() -> Result<(), std::io::Error> {
-  test_files(&vec!["expressions/evaluate.lox"], Interpret::Ok)?;
+  test_files(&vec!["expressions/evaluate.lox"], ExecuteResult::Ok)?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -249,10 +249,10 @@ fn field() -> Result<(), std::io::Error> {
       "field/method.lox",
       "field/on_instance.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
   test_files(
     &vec![
@@ -272,7 +272,7 @@ fn field() -> Result<(), std::io::Error> {
       "field/set_on_string.lox",
       "field/undefined.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
@@ -285,7 +285,7 @@ fn for_loop() -> Result<(), std::io::Error> {
       "for/syntax.lox",
       "for/closure_in_body.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -297,10 +297,10 @@ fn for_loop() -> Result<(), std::io::Error> {
       "for/statement_initializer.lox",
       "for/var_in_body.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -314,7 +314,7 @@ fn function() -> Result<(), std::io::Error> {
       "function/print.lox",
       "function/recursion.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -324,7 +324,7 @@ fn function() -> Result<(), std::io::Error> {
       "function/too_many_arguments.lox",
       "function/too_many_parameters.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
   test_files(
@@ -333,7 +333,7 @@ fn function() -> Result<(), std::io::Error> {
       "function/local_mutual_recursion.lox",
       "function/missing_arguments.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
@@ -346,7 +346,7 @@ fn if_stmt() -> Result<(), std::io::Error> {
       "if/if.lox",
       "if/truth.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -358,10 +358,10 @@ fn if_stmt() -> Result<(), std::io::Error> {
       "if/var_in_then.lox",
       "if/var_in_then.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -377,15 +377,18 @@ fn indexing() -> Result<(), std::io::Error> {
       "indexing/map_nested_get.lox",
       "indexing/map_nested_set.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
-  test_files(&vec![
-    "indexing/list_out_of_range.lox",
-    "indexing/map_key_not_found.lox"
-  ], Interpret::RuntimeError)
+  test_files(
+    &vec![
+      "indexing/list_out_of_range.lox",
+      "indexing/map_key_not_found.lox",
+    ],
+    ExecuteResult::RuntimeError,
+  )
 }
 
 #[test]
@@ -396,12 +399,12 @@ fn inheritance() -> Result<(), std::io::Error> {
       "inheritance/inherit_methods.lox",
       "inheritance/set_fields_from_base_class.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
     &vec!["inheritance/parenthesized_superclass.lox"],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
   test_files(
@@ -410,13 +413,13 @@ fn inheritance() -> Result<(), std::io::Error> {
       "inheritance/inherit_from_nil.lox",
       "inheritance/inherit_from_number.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
 #[test]
 fn limit() -> Result<(), std::io::Error> {
-  test_files(&vec!["expressions/evaluate.lox"], Interpret::Ok)?;
+  test_files(&vec!["expressions/evaluate.lox"], ExecuteResult::Ok)?;
 
   test_files(
     &vec![
@@ -426,17 +429,17 @@ fn limit() -> Result<(), std::io::Error> {
       "limit/too_many_locals.lox",
       "limit/too_many_upvalues.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec!["limit/stack_overflow.lox"], Interpret::RuntimeError)
+  test_files(&vec!["limit/stack_overflow.lox"], ExecuteResult::RuntimeError)
 }
 
 #[test]
 fn list() -> Result<(), std::io::Error> {
   test_files(
     &vec!["list/empty.lox", "list/homogeneous.lox", "list/mixed.lox"],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -444,10 +447,10 @@ fn list() -> Result<(), std::io::Error> {
       "list/missing_comma_in_initializer.lox",
       "list/missing_closing_bracket.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -459,19 +462,19 @@ fn logical_operator() -> Result<(), std::io::Error> {
       "logical_operator/or_truth.lox",
       "logical_operator/or.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
 fn map() -> Result<(), std::io::Error> {
   test_files(
     &vec!["map/empty.lox", "map/homogeneous.lox", "map/mixed.lox"],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -481,10 +484,10 @@ fn map() -> Result<(), std::io::Error> {
       "map/statement_key.lox",
       "map/statement_value.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -495,7 +498,7 @@ fn method() -> Result<(), std::io::Error> {
       "method/empty_block.lox",
       "method/print_bound_method.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -503,7 +506,7 @@ fn method() -> Result<(), std::io::Error> {
       "method/too_many_arguments.lox",
       "method/too_many_parameters.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
   test_files(
@@ -513,22 +516,22 @@ fn method() -> Result<(), std::io::Error> {
       "method/not_found.lox",
       "method/refer_to_name.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
 #[test]
 fn nil() -> Result<(), std::io::Error> {
-  test_files(&vec!["nil/literal.lox"], Interpret::Ok)?;
+  test_files(&vec!["nil/literal.lox"], ExecuteResult::Ok)?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
 fn number() -> Result<(), std::io::Error> {
-  test_files(&vec!["number/literals.lox"], Interpret::Ok)?;
+  test_files(&vec!["number/literals.lox"], ExecuteResult::Ok)?;
 
   test_files(
     &vec![
@@ -536,10 +539,10 @@ fn number() -> Result<(), std::io::Error> {
       "number/leading_dot.lox",
       "number/trailing_dot.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
@@ -559,10 +562,10 @@ fn operator() -> Result<(), std::io::Error> {
       "operator/not.lox",
       "operator/subtract.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec![], Interpret::CompileError)?;
+  test_files(&vec![], ExecuteResult::CompileError)?;
 
   test_files(
     &vec![
@@ -588,24 +591,24 @@ fn operator() -> Result<(), std::io::Error> {
       "operator/subtract_nonnum_num.lox",
       "operator/subtract_num_nonnum.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
 #[test]
 fn print() -> Result<(), std::io::Error> {
-  test_files(&vec![], Interpret::Ok)?;
+  test_files(&vec![], ExecuteResult::Ok)?;
 
-  test_files(&vec!["print/missing_argument.lox"], Interpret::CompileError)?;
+  test_files(&vec!["print/missing_argument.lox"], ExecuteResult::CompileError)?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
 fn regression() -> Result<(), std::io::Error> {
   test_files(
     &vec!["regression/40.lox", "regression/394.lox"],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )
 }
 
@@ -620,26 +623,26 @@ fn return_test() -> Result<(), std::io::Error> {
       "return/return_nil_if_no_value.lox",
       "return/return_nil_if_no_value.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec!["return/at_top_level.lox"], Interpret::CompileError)?;
+  test_files(&vec!["return/at_top_level.lox"], ExecuteResult::CompileError)?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }
 
 #[test]
 fn string() -> Result<(), std::io::Error> {
   test_files(
     &vec!["string/literals.lox", "string/multiline.lox"],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
-  test_files(&vec!["string/unterminated.lox"], Interpret::CompileError)?;
+  test_files(&vec!["string/unterminated.lox"], ExecuteResult::CompileError)?;
 
   test_files(
     &vec!["string/error_after_multiline.lox"],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
@@ -657,7 +660,7 @@ fn super_() -> Result<(), std::io::Error> {
       "super/super_in_closure_in_inherited_method.lox",
       "super/super_in_inherited_method.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -670,7 +673,7 @@ fn super_() -> Result<(), std::io::Error> {
       "super/super_without_dot.lox",
       "super/super_without_name.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
   test_files(
@@ -679,7 +682,7 @@ fn super_() -> Result<(), std::io::Error> {
       "super/missing_arguments.lox",
       "super/no_superclass_method.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
@@ -701,7 +704,7 @@ fn variable() -> Result<(), std::io::Error> {
       "variable/unreached_undefined.lox",
       "variable/use_global_in_initializer.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -714,7 +717,7 @@ fn variable() -> Result<(), std::io::Error> {
       "variable/use_nil_as_var.lox",
       "variable/use_this_as_var.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
   test_files(
@@ -723,7 +726,7 @@ fn variable() -> Result<(), std::io::Error> {
       "variable/undefined_local.lox",
       "variable/undefined_local.lox",
     ],
-    Interpret::RuntimeError,
+    ExecuteResult::RuntimeError,
   )
 }
 
@@ -736,7 +739,7 @@ fn while_test() -> Result<(), std::io::Error> {
       "while/return_inside.lox",
       "while/syntax.lox",
     ],
-    Interpret::Ok,
+    ExecuteResult::Ok,
   )?;
 
   test_files(
@@ -745,8 +748,8 @@ fn while_test() -> Result<(), std::io::Error> {
       "while/fun_in_body.lox",
       "while/var_in_body.lox",
     ],
-    Interpret::CompileError,
+    ExecuteResult::CompileError,
   )?;
 
-  test_files(&vec![], Interpret::RuntimeError)
+  test_files(&vec![], ExecuteResult::RuntimeError)
 }

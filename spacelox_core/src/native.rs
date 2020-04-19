@@ -1,19 +1,22 @@
 use crate::{
   io::StdIo,
   managed::{Manage, Trace},
-  memory::Gc,
-  value::{ArityKind, Value},
+  value::{ArityKind, Value}, hooks::Hooks,
 };
 use std::fmt;
 use std::{mem, ptr};
 
 #[derive(Clone, Debug)]
 pub struct NativeMeta {
+  /// The name of the native function
   pub name: &'static str,
+
+  /// The arity of the function
   pub arity: ArityKind,
 }
 
 impl NativeMeta {
+  /// Create a new set of meta date for a native function
   pub const fn new(name: &'static str, arity: ArityKind) -> Self {
     NativeMeta { name, arity }
   }
@@ -33,7 +36,7 @@ pub trait NativeFun {
   fn meta(&self) -> &NativeMeta;
 
   /// Call the native functions
-  fn call(&self, gc: &Gc, context: &dyn Trace, values: &[Value]) -> NativeResult;
+  fn call(&self, hooks: &Hooks, values: &[Value]) -> NativeResult;
 }
 
 impl PartialEq<dyn NativeFun> for dyn NativeFun {
@@ -92,7 +95,7 @@ pub trait NativeMethod {
   fn meta(&self) -> &NativeMeta;
 
   /// Call the native functions
-  fn call(&self, gc: &Gc, context: &dyn Trace, this: Value, values: &[Value]) -> NativeResult;
+  fn call(&self, hooks: &Hooks, this: Value, values: &[Value]) -> NativeResult;
 }
 
 impl PartialEq<dyn NativeMethod> for dyn NativeMethod {
@@ -104,7 +107,7 @@ impl PartialEq<dyn NativeMethod> for dyn NativeMethod {
 impl fmt::Debug for dyn NativeMethod {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let meta = self.meta();
-    f.debug_struct("NativeFun")
+    f.debug_struct("NativeMethod")
       .field("name", &meta.name)
       .field("arity", &meta.arity)
       .finish()

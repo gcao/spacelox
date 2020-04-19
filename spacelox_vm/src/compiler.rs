@@ -1,12 +1,13 @@
-use crate::constants::{INIT, SCRIPT, SUPER, THIS};
 use crate::scanner::Scanner;
 use spacelox_core::chunk::{AlignedByteCode, Chunk, UpvalueIndex};
 use spacelox_core::io::{Io, StdIo};
 use spacelox_core::managed::{Manage, Managed, Trace};
-use spacelox_core::memory::{Gc, NO_GC};
 use spacelox_core::token::{Token, TokenKind};
 use spacelox_core::utils::{copy_string, do_if_some};
-use spacelox_core::value::{ArityKind, Fun, FunKind, Value};
+use spacelox_core::{
+  constants::{INIT, SCRIPT, SUPER, THIS},
+  value::{ArityKind, Fun, FunKind, Value}, hooks::Hooks,
+};
 use std::convert::TryInto;
 use std::mem;
 
@@ -56,7 +57,7 @@ pub struct Compiler<'a, 's, I: Io + 'static> {
   current_class: Option<Managed<ClassCompiler>>,
 
   /// Analytics for the compiler
-  gc: &'a mut Gc,
+  hooks: &'a Hooks<'a>,
 
   /// The environments standard io access
   io: I,
@@ -93,22 +94,16 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   ///
   /// let compiler = Compiler::new(NativeIo::new(), &mut parser, &mut gc);
   /// ```
-  pub fn new(io: I, parser: &'a mut Parser<'s, I::StdIo>, gc: &'a mut Gc) -> Self {
-    let fun = gc.manage(
-      Fun {
-        arity: ArityKind::Fixed(0),
-        upvalue_count: 0,
-        name: gc.manage_str(String::from(SCRIPT), &NO_GC),
-        chunk: Chunk::default(),
-      },
-      &NO_GC,
+  pub fn new(io: I, parser: &'a mut Parser<'s, I::StdIo>, hooks: &'a Hooks) -> Self {
+    let fun = hooks.manage(
+      Fun::new(hooks.manage_str(String::from(SCRIPT)))
     );
 
     let mut compiler = Self {
       fun,
       current_class: None,
       fun_kind: FunKind::Script,
-      gc,
+      hooks,
       io,
       parser,
       enclosing: None,
@@ -135,7 +130,7 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
       fun: unsafe { (*enclosing).fun },
       fun_kind: fun_kind.clone(),
       current_class: unsafe { (*enclosing).current_class },
-      gc: unsafe { (*enclosing).gc },
+      hooks: unsafe { (*enclosing).hooks },
       io: unsafe { (*enclosing).io },
       parser: unsafe { (*enclosing).parser },
       enclosing: Some(enclosing),
@@ -152,14 +147,8 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
       upvalues: vec![UpvalueIndex::Local(0); std::u8::MAX as usize],
     };
 
-    child.fun = child.gc.manage(
-      Fun {
-        arity: ArityKind::Fixed(0),
-        upvalue_count: 0,
-        name,
-        chunk: Chunk::default(),
-      },
-      &NO_GC,
+    child.fun = child.hooks.manage(
+      Fun::new(name)
     );
 
     child.locals[0] = first_local(fun_kind);
@@ -215,8 +204,13 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   }
 
   /// The current chunk
-  fn current_chunk(&mut self) -> &mut Chunk {
-    &mut self.fun.chunk
+  fn current_chunk(&mut self) -> &Chunk {
+    self.fun.chunk()
+  }
+
+  /// write instruction to the current function
+  fn write_instruction(&mut self, op_code: AlignedByteCode, line: u32) {
+    self.fun.write_instruction(self.hooks, op_code, line)
   }
 
   /// Parse a declaration
@@ -286,13 +280,12 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
     self.emit_byte(AlignedByteCode::Class(name_constant));
     self.define_variable(name_constant);
 
-    let mut class_compiler = self.gc.manage(
+    let mut class_compiler = self.hooks.manage(
       ClassCompiler {
         name: self.parser.previous.clone(),
         has_super_class: false,
         enclosing: self.current_class,
       },
-      &NO_GC,
     );
     self.current_class = Some(class_compiler);
 
@@ -353,8 +346,8 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   /// Parse a function declaration and body
   fn function(&mut self, fun_kind: FunKind) {
     let name = self
-      .gc
-      .manage_str(self.parser.previous.lexeme.to_string(), &NO_GC);
+      .hooks
+      .manage_str(self.parser.previous.lexeme.to_string());
 
     let mut fun_compiler = Compiler::child(name, fun_kind, &mut *self);
     fun_compiler.begin_scope();
@@ -654,7 +647,7 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   /// Print the chunk if debug and an error occurred
   #[cfg(feature = "debug")]
   fn print_chunk(&self) {
-    disassemble_chunk(&self.io.stdio(), &self.fun.chunk, &self.fun.name)
+    disassemble_chunk(&self.io.stdio(), self.fun.chunk(), &self.fun.name)
   }
 
   /// Compiles a binary expression into it's equivalent bytecodes
@@ -813,8 +806,8 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   /// Compile a string literal
   fn string(&mut self) {
     let string = self
-      .gc
-      .manage_str(copy_string(&self.parser.previous), &NO_GC);
+      .hooks
+      .manage_str(copy_string(&self.parser.previous));
     let value = Value::String(string);
     self.emit_constant(value)
   }
@@ -1048,7 +1041,7 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
 
   /// Generate a constant from the provided identifier token
   fn identifer_constant(&mut self, name: Token) -> u8 {
-    let identifer = self.gc.manage_str(name.lexeme, &NO_GC);
+    let identifer = self.hooks.manage_str(name.lexeme);
     self.make_constant(Value::String(identifer))
   }
 
@@ -1198,7 +1191,7 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
 
   /// Add a constant to the current chunk
   fn make_constant(&mut self, value: Value) -> u8 {
-    let index = self.current_chunk().add_constant(value);
+    let index = self.fun.add_constant(&self.hooks, value);
     if index > std::u8::MAX as usize {
       self.parser.error("Too many constants in one chunk.");
       return 0;
@@ -1217,8 +1210,8 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   fn patch_jump(&mut self, offset: usize) {
     let jump_landing = self.calc_jump(offset);
     let buffer = jump_landing.to_ne_bytes();
-    self.current_chunk().instructions[offset] = buffer[0];
-    self.current_chunk().instructions[offset + 1] = buffer[1];
+    self.fun.replace_instruction(offset, buffer[0]);
+    self.fun.replace_instruction(offset + 1, buffer[1]);
   }
 
   /// Calculate the jump once it's landing has been found
@@ -1245,14 +1238,14 @@ impl<'a, 's, I: Io + Clone> Compiler<'a, 's, I> {
   /// Emit two provided instruction
   fn emit_bytes(&mut self, op_code1: AlignedByteCode, op_code2: AlignedByteCode) {
     let line = self.parser.previous.line;
-    self.current_chunk().write_instruction(op_code1, line);
-    self.current_chunk().write_instruction(op_code2, line);
+    self.write_instruction(op_code1, line);
+    self.write_instruction(op_code2, line);
   }
 
   /// Emit a provided instruction
   fn emit_byte(&mut self, op_code: AlignedByteCode) {
     let line = self.parser.previous.line;
-    self.current_chunk().write_instruction(op_code, line);
+    self.write_instruction(op_code, line);
   }
 
   /// Emit a jump instruction
@@ -1607,7 +1600,8 @@ mod test {
   use super::*;
   use crate::debug::disassemble_chunk;
   use spacelox_core::chunk::decode_u16;
-  use spacelox_core::io::{NativeIo, NativeStdIo};
+  use spacelox_core::memory::Gc;
+  use spacelox_core::{hooks::NoContext, io::{NativeIo, NativeStdIo}};
 
   enum ByteCodeTest {
     Code(AlignedByteCode),
@@ -1618,7 +1612,10 @@ mod test {
     let io = NativeIo::new();
     let mut parser = Parser::new(io.stdio(), &src);
 
-    let compiler = Compiler::new(io, &mut parser, gc);
+    let mut context = NoContext::new(gc);
+    let hooks = &Hooks::new(&mut context);
+
+    let compiler = Compiler::new(io, &mut parser, &hooks);
     let result = compiler.compile();
     assert_eq!(result.success, true);
 
@@ -1626,7 +1623,7 @@ mod test {
   }
 
   fn decode_byte_code(fun: Managed<Fun>) -> Vec<AlignedByteCode> {
-    let bytes = &fun.chunk.instructions;
+    let bytes = &fun.chunk().instructions;
     let mut decoded = Vec::new();
     let mut offset = 0;
 
@@ -1654,10 +1651,10 @@ mod test {
     offset: usize,
     slot: u8,
   ) -> usize {
-    let inner_fun = fun.chunk.constants[slot as usize].to_fun();
+    let inner_fun = fun.chunk().constants[slot as usize].to_fun();
     let mut current_offset = offset;
 
-    let instructions = &fun.chunk.instructions;
+    let instructions = &fun.chunk().instructions;
     for _ in 0..inner_fun.upvalue_count {
       let scalar = decode_u16(&instructions[offset..offset + 2]);
 
@@ -1670,7 +1667,7 @@ mod test {
   }
 
   fn assert_simple_bytecode(fun: Managed<Fun>, code: &[AlignedByteCode]) {
-    disassemble_chunk(&NativeStdIo::new(), &fun.chunk, "test");
+    disassemble_chunk(&NativeStdIo::new(), &fun.chunk(), "test");
     let decoded_byte_code = decode_byte_code(fun);
     assert_eq!(decoded_byte_code.len(), code.len());
 
@@ -1681,14 +1678,14 @@ mod test {
   }
 
   fn assert_fun_bytecode(fun: Managed<Fun>, code: &[ByteCodeTest]) {
-    disassemble_chunk(&NativeStdIo::new(), &fun.chunk, &*fun.name);
+    disassemble_chunk(&NativeStdIo::new(), &fun.chunk(), &*fun.name);
     let decoded_byte_code = decode_byte_code(fun);
     assert_eq!(decoded_byte_code.len(), code.len(), "for fun {}", fun.name);
 
     for i in 0..code.len() {
       match decoded_byte_code[i] {
         AlignedByteCode::Closure(index) => {
-          let fun = fun.chunk.constants[index as usize].to_fun();
+          let fun = fun.chunk().constants[index as usize].to_fun();
 
           match &code[i] {
             ByteCodeTest::Fun((expected, inner)) => {

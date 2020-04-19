@@ -1,7 +1,5 @@
-use spacelox_core::managed::Trace;
-use spacelox_core::memory::Gc;
 use spacelox_core::native::{NativeFun, NativeMeta, NativeResult};
-use spacelox_core::value::{ArityKind, Value};
+use spacelox_core::{hooks::Hooks, value::{ArityKind, Value}};
 use std::time::SystemTime;
 
 #[derive(Clone, Debug)]
@@ -32,7 +30,7 @@ impl NativeFun for NativeClock {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, _args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, _args: &[Value]) -> NativeResult {
     match self.start.elapsed() {
       Ok(elapsed) => NativeResult::Success(Value::Number((elapsed.as_micros() as f64) / 1000000.0)),
       Err(e) => NativeResult::RuntimeError(format!("clock failed {}", e)),
@@ -43,7 +41,7 @@ impl NativeFun for NativeClock {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::support::test_native_dependencies;
+  use crate::support::{TestContext, test_native_dependencies};
 
   #[test]
   fn new() {
@@ -56,16 +54,19 @@ mod test {
   #[test]
   fn call() {
     let clock = NativeClock::new();
-    let (gc, context) = test_native_dependencies();
+    let gc = test_native_dependencies();
+    let mut context = TestContext::new(&gc);
+    let hooks = Hooks::new(&mut context);
+
     let values = &[];
 
-    let result1 = clock.call(&gc, &*context, values);
+    let result1 = clock.call(&hooks, values);
     let res1 = match result1 {
       NativeResult::Success(res) => res,
       NativeResult::RuntimeError(_) => panic!(),
     };
 
-    let result2 = clock.call(&gc, &*context, values);
+    let result2 = clock.call(&hooks, values);
     let res2 = match result2 {
       NativeResult::Success(res) => res,
       NativeResult::RuntimeError(_) => panic!(),

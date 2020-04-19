@@ -45,6 +45,13 @@ impl<K: Ord + Hash, V> DynamicMap<K, V> {
     }
   }
 
+  pub fn capacity(&self) -> usize {
+    match self {
+      Self::Linear(linear) => linear.capacity(),
+      Self::Hash(hash) => hash.capacity(),
+    }
+  }
+
   pub fn for_each<F>(&self, closure: F)
   where
     F: FnMut((&K, &V)),

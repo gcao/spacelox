@@ -1,10 +1,11 @@
-use crate::chunk::Chunk;
+use crate::chunk::{AlignedByteCode, Chunk};
 use crate::io::StdIo;
 use crate::{
+  constants::INIT,
   dynamic_map::DynamicMap,
   managed::{Manage, Managed, Trace},
   native::{NativeFun, NativeMethod},
-  utils::do_if_some,
+  utils::do_if_some, hooks::Hooks,
 };
 use fnv::FnvHashMap;
 use std::fmt;
@@ -494,6 +495,7 @@ impl Trace for Value {
       Value::Instance(instance) => instance.trace(),
       Value::Upvalue(upvalue) => upvalue.trace(),
       Value::NativeFun(native) => native.trace(),
+      Value::NativeMethod(native) => native.trace(),
       _ => true,
     }
   }
@@ -508,6 +510,7 @@ impl Trace for Value {
       Value::Instance(instance) => instance.trace_debug(stdio),
       Value::Upvalue(upvalue) => upvalue.trace_debug(stdio),
       Value::NativeFun(native) => native.trace_debug(stdio),
+      Value::NativeMethod(native) => native.trace_debug(stdio),
       _ => true,
     }
   }
@@ -531,6 +534,7 @@ impl Trace for BuiltInClasses {
     self.number.trace();
     self.string.trace();
     self.list.trace();
+    self.map.trace();
     self.fun.trace();
     self.native.trace();
 
@@ -543,6 +547,7 @@ impl Trace for BuiltInClasses {
     self.number.trace_debug(stdio);
     self.string.trace_debug(stdio);
     self.list.trace_debug(stdio);
+    self.map.trace_debug(stdio);
     self.fun.trace_debug(stdio);
     self.native.trace_debug(stdio);
 
@@ -672,7 +677,7 @@ pub struct Fun {
   pub upvalue_count: usize,
 
   /// Code for the function body
-  pub chunk: Chunk,
+  chunk: Chunk,
 
   /// Name if not top-level script
   pub name: Managed<String>,
@@ -686,6 +691,22 @@ impl Fun {
       chunk: Chunk::default(),
       name,
     }
+  }
+
+  pub fn chunk(&self) -> &Chunk {
+    &self.chunk
+  }
+
+  pub fn write_instruction(&mut self, hooks: &Hooks, op_code: AlignedByteCode, line: u32) {
+    hooks.resize(self, |fun| fun.chunk.write_instruction(op_code, line));
+  }
+
+  pub fn replace_instruction(&mut self, index: usize, instruction: u8) {
+    self.chunk.instructions[index] = instruction;
+  }
+
+  pub fn add_constant(&mut self, hooks: &Hooks, constant: Value) -> usize {
+    hooks.resize(self, |fun| fun.chunk.add_constant(constant))
   }
 }
 
@@ -701,7 +722,7 @@ impl fmt::Debug for Fun {
       .field("arity", &self.arity)
       .field("upvalue_count", &self.upvalue_count)
       .field("chunk", &"Chunk { ... }")
-      .field("name", &self.name)
+      .field("name", &"Managed(String {...})")
       .finish()
   }
 }
@@ -739,7 +760,7 @@ impl Manage for Fun {
   }
 
   fn size(&self) -> usize {
-    mem::size_of::<Self>()
+    mem::size_of::<Self>() + self.chunk.size()
   }
 }
 
@@ -767,7 +788,7 @@ impl Manage for String {
   }
 
   fn size(&self) -> usize {
-    mem::size_of_val(self) + self.capacity()
+    mem::size_of::<Self>() + self.capacity()
   }
 }
 
@@ -803,7 +824,7 @@ impl Manage for Vec<Value> {
   }
 
   fn size(&self) -> usize {
-    mem::size_of_val(self) + self.capacity()
+    mem::size_of::<Vec<Value>>() + mem::size_of::<Value>() * self.capacity()
   }
 }
 
@@ -841,7 +862,7 @@ impl Manage for FnvHashMap<Value, Value> {
   }
 
   fn size(&self) -> usize {
-    mem::size_of_val(self) + self.capacity()
+    mem::size_of::<FnvHashMap<Value, Value>>() + self.capacity() * mem::size_of::<Value>() * 2
   }
 }
 
@@ -924,7 +945,7 @@ impl Manage for Closure {
   }
 
   fn size(&self) -> usize {
-    mem::size_of::<Self>()
+    mem::size_of::<Self>() + mem::size_of::<Value>() * self.upvalues.capacity()
   }
 }
 
@@ -932,8 +953,7 @@ impl Manage for Closure {
 pub struct Class {
   pub name: Managed<String>,
   pub init: Option<Value>,
-  // pub methods: FnvHashMap<Managed<String>, Value>,
-  pub methods: DynamicMap<Managed<String>, Value>,
+  methods: DynamicMap<Managed<String>, Value>,
 }
 
 impl Class {
@@ -941,9 +961,35 @@ impl Class {
     Class {
       name,
       init: None,
-      // methods: FnvHashMap::with_capacity_and_hasher(4, Default::default()),
       methods: DynamicMap::new(),
     }
+  }
+
+  pub fn add_method(&mut self, hooks: &Hooks, name: Managed<String>, method: Value) {
+    if *name == INIT {
+      self.init = Some(method);
+    }
+
+    hooks.resize(self, |class| {
+      class.methods.insert(name, method);
+    });
+  }
+
+  pub fn get_method(&self, name: &Managed<String>) -> Option<&Value> {
+    self.methods.get(name)
+  }
+
+  pub fn inherit(&mut self, hooks: &Hooks, super_class: Managed<Class>) {
+    hooks.resize(self, |class| {
+      super_class.methods.for_each(|(key, value)| {
+        match class.methods.get(&*key) {
+          None => class.methods.insert(*key, *value),
+          _ => None,
+        };
+      });
+    });
+
+    self.init = self.init.or(super_class.init);
   }
 }
 
@@ -969,11 +1015,6 @@ impl Trace for Class {
       val.trace();
     });
 
-    // self.methods.iter().for_each(|(key, val)| {
-    //   key.trace();
-    //   val.trace();
-    // });
-
     true
   }
 
@@ -987,11 +1028,6 @@ impl Trace for Class {
       key.trace_debug(stdio);
       val.trace_debug(stdio);
     });
-
-    // self.methods.iter().for_each(|(key, val)| {
-    //   key.trace_debug(stdio);
-    //   val.trace_debug(stdio);
-    // });
 
     true
   }
@@ -1012,13 +1048,14 @@ impl Manage for Class {
 
   fn size(&self) -> usize {
     mem::size_of::<Class>()
+      + (mem::size_of::<Managed<String>>() + mem::size_of::<Value>()) * self.methods.capacity()
   }
 }
 
 #[derive(PartialEq, Clone)]
 pub struct Instance {
   pub class: Managed<Class>,
-  pub fields: DynamicMap<Managed<String>, Value>,
+  fields: DynamicMap<Managed<String>, Value>,
 }
 
 impl Instance {
@@ -1027,6 +1064,16 @@ impl Instance {
       class,
       fields: DynamicMap::new(),
     }
+  }
+
+  pub fn set_field(&mut self, hooks: &Hooks, name: Managed<String>, value: Value) {
+    hooks.resize(self, |instance: &mut Instance| {
+      instance.fields.insert(name, value);
+    });
+  }
+
+  pub fn get_field(&self, name: &Managed<String>) -> Option<&Value> {
+    self.fields.get(name)
   }
 }
 
@@ -1078,6 +1125,7 @@ impl Manage for Instance {
 
   fn size(&self) -> usize {
     mem::size_of::<Instance>()
+      + (mem::size_of::<Managed<String>>() + mem::size_of::<Value>()) * self.fields.capacity()
   }
 }
 

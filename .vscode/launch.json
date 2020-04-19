@@ -80,7 +80,7 @@
         }
       },
       "args": [
-        "indexing/list_out_of_range.lox"
+        "field/many.lox"
       ],
       "sourceLanguages": ["rust"],
       "cwd": "${workspaceFolder}/spacelox_vm/fixture",

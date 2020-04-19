@@ -105,7 +105,7 @@ impl<'a> Gc {
   pub fn manage_str<C: Trace + ?Sized>(&self, string: String, context: &C) -> Managed<String> {
     if let Some(cached) = self.intern_cache.borrow_mut().get(&*string) {
       return *cached;
-    } 
+    }
 
     let managed = self.allocate(string, context);
     let static_str: &'static str = unsafe { &*(&**managed as *const str) };
@@ -137,13 +137,46 @@ impl<'a> Gc {
   ///   _ => panic!("No equal!"),
   /// }
   /// ```
-  pub fn clone_managed<T: 'static + Manage + Clone, C: Trace>(
+  pub fn clone_managed<T: 'static + Manage + Clone, C: Trace + ?Sized>(
     &self,
     managed: Managed<T>,
     context: &C,
   ) -> Managed<T> {
     let cloned = (*managed).clone();
     self.allocate(cloned, context)
+  }
+
+  /// track events that may change the size of the heap. If
+  /// a heap grows beyond the current threshold will trigger a gc
+  pub fn resize<T: 'static + Manage, R, F: Fn(&mut T) -> R, C: Trace + ?Sized>(
+    &self,
+    managed: &mut T,
+    context: &C,
+    action: F,
+  ) -> R {
+    let before = managed.size();
+    let result = action(managed);
+    let after = managed.size();
+
+    // get the size delta before and after the action
+    // this would occur because of some resize
+    let delta = after - before;
+
+    let allocated = self
+      .bytes_allocated
+      .replace(self.bytes_allocated.get() + delta);
+
+    // collect if need be
+    #[cfg(feature = "debug_stress_gc")]
+    {
+      self.collect_garbage::<T, C>(context, None);
+    }
+
+    if allocated + delta > self.next_gc.get() {
+      self.collect_garbage::<T, C>(context, None);
+    }
+
+    result
   }
 
   /// Allocate `data` on the gc's heap. If conditions are met
@@ -165,11 +198,11 @@ impl<'a> Gc {
 
     #[cfg(feature = "debug_stress_gc")]
     {
-      self.collect_garbage(context, managed);
+      self.collect_garbage(context, Some(managed));
     }
 
     if allocated + size > self.next_gc.get() {
-      self.collect_garbage(context, managed);
+      self.collect_garbage(context, Some(managed));
     }
 
     #[cfg(feature = "debug_gc")]
@@ -180,7 +213,7 @@ impl<'a> Gc {
 
   /// Collect garbage present in the heap for unreachable objects. Use the provided context
   /// to mark a set of initial roots into the vm.
-  fn collect_garbage<T: 'static + Manage, C: Trace + ?Sized>(&self, context: &C, last: Managed<T>) {
+  fn collect_garbage<T: 'static + Manage, C: Trace + ?Sized>(&self, context: &C, last: Option<Managed<T>>) {
     let mut _before = self.bytes_allocated.get();
     self.gc_count.set(self.gc_count.get() + 1);
 
@@ -188,7 +221,9 @@ impl<'a> Gc {
     self.stdio.println("-- gc begin");
 
     if self.trace(context) {
-      self.trace(&last);
+      if let Some(obj) = last {
+        self.trace(&obj);
+      }
 
       self.sweep_string_cache();
       let remaining = self.sweep();
@@ -214,12 +249,14 @@ impl<'a> Gc {
     }
   }
 
+  /// wrapper around an entities trace method to select either normal
+  /// or debug trace at compile time.
   fn trace<T: Trace + ?Sized>(&self, entity: &T) -> bool {
     #[cfg(not(feature = "debug_gc"))]
     return entity.trace();
 
     #[cfg(feature = "debug_gc")]
-    return entity.trace_debug(&self.stdio);
+    return entity.trace_debug(&*self.stdio);
   }
 
   /// Remove unmarked objects from the heap. This calculates the remaining
@@ -342,10 +379,10 @@ impl<'a> Gc {
 }
 
 impl<'a> Default for Gc {
-  fn default() -> Self { 
+  fn default() -> Self {
     Gc::new(Box::new(NativeStdIo::new()))
   }
-} 
+}
 pub struct NoGc();
 
 impl fmt::Display for NoGc {
@@ -364,7 +401,7 @@ impl Trace for NoGc {
   }
 }
 
-pub static NO_GC: NoGc = NoGc {};
+pub static NO_GC: NoGc = NoGc();
 
 #[cfg(test)]
 mod test {
