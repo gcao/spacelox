@@ -1,18 +1,18 @@
-use spacelox_core::managed::{Managed, Trace};
-use spacelox_core::memory::Gc;
+use spacelox_core::managed::{Managed};
 use spacelox_core::native::{NativeMeta, NativeMethod, NativeResult};
-use spacelox_core::value::{ArityKind, Class, Value};
+use spacelox_core::{hooks::Hooks, value::{ArityKind, Class, Value}};
 
 pub const NUMBER_CLASS_NAME: &'static str = "Nil";
 const NUMBER_STR: NativeMeta = NativeMeta::new("str", ArityKind::Fixed(0));
 
-pub fn create_number_class<C: Trace>(gc: &Gc, context: &C) -> Managed<Class> {
-  let name = gc.manage_str(String::from(NUMBER_CLASS_NAME), context);
-  let mut class = gc.manage(Class::new(name), context);
+pub fn create_number_class(hooks: &Hooks) -> Managed<Class> {
+  let name = hooks.manage_str(String::from(NUMBER_CLASS_NAME));
+  let mut class = hooks.manage(Class::new(name));
 
-  class.methods.insert(
-    gc.manage_str(String::from(NUMBER_STR.name), context),
-    Value::NativeMethod(gc.manage(Box::new(NumberStr::new()), context)),
+  class.add_method(
+    hooks,
+    hooks.manage_str(String::from(NUMBER_STR.name)),
+    Value::NativeMethod(hooks.manage(Box::new(NumberStr::new()))),
   );
 
   class
@@ -36,7 +36,7 @@ impl NativeMethod for NumberStr {
     &self.meta
   }
 
-  fn call(&self, gc: &Gc, context: &dyn Trace, this: Value, _args: &[Value]) -> NativeResult {
-    NativeResult::Success(Value::String(gc.manage_str(this.to_string(), context)))
+  fn call(&self, hook: &Hooks, this: Value, _args: &[Value]) -> NativeResult {
+    NativeResult::Success(Value::String(hook.manage_str(this.to_string())))
   }
 }

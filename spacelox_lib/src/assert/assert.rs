@@ -1,7 +1,5 @@
-use spacelox_core::managed::Trace;
-use spacelox_core::memory::Gc;
 use spacelox_core::native::{NativeFun, NativeMeta, NativeResult};
-use spacelox_core::value::{ArityKind, Value};
+use spacelox_core::{hooks::Hooks, value::{ArityKind, Value}};
 
 const NATIVE_ASSERT_META: NativeMeta = NativeMeta::new("assert", ArityKind::Fixed(1));
 
@@ -32,7 +30,7 @@ impl NativeFun for NativeAssert {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, args: &[Value]) -> NativeResult {
     match args[0] {
       Value::Bool(b) => {
         if b {
@@ -72,7 +70,7 @@ impl NativeFun for NativeAssertEq {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, args: &[Value]) -> NativeResult {
     if args[0] == args[1] {
       return NativeResult::Success(Value::Nil);
     }
@@ -108,7 +106,7 @@ impl NativeFun for NativeAssertNe {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, args: &[Value]) -> NativeResult {
     if args[0] != args[1] {
       return NativeResult::Success(Value::Nil);
     }
@@ -126,7 +124,7 @@ mod test {
   #[cfg(test)]
   mod assert {
     use super::*;
-    use crate::support::test_native_dependencies;
+    use crate::support::{TestContext, test_native_dependencies};
 
     #[test]
     fn new() {
@@ -139,11 +137,13 @@ mod test {
     #[test]
     fn call() {
       let assert = NativeAssert::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
 
       let values = &[Value::Bool(true)];
 
-      let result = match assert.call(&gc, &*context, values) {
+      let result = match assert.call(&hooks, values) {
         NativeResult::Success(res) => res,
         NativeResult::RuntimeError(_) => panic!(),
       };
@@ -155,6 +155,7 @@ mod test {
   #[cfg(test)]
   mod assert_eq {
     use super::*;
+    use crate::support::TestContext;
 
     #[test]
     fn new() {
@@ -167,11 +168,13 @@ mod test {
     #[test]
     fn call() {
       let assert_eq = NativeAssertEq::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
 
       let values = &[Value::Number(10.5), Value::Number(10.5)];
 
-      let result = match assert_eq.call(&gc, &*context, values) {
+      let result = match assert_eq.call(&hooks, values) {
         NativeResult::Success(res) => res,
         NativeResult::RuntimeError(_) => panic!(),
       };
@@ -183,6 +186,7 @@ mod test {
   #[cfg(test)]
   mod assert_ne {
     use super::*;
+    use crate::support::TestContext;
 
     #[test]
     fn new() {
@@ -195,10 +199,13 @@ mod test {
     #[test]
     fn call() {
       let assert_eq = NativeAssertNe::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
+
       let values = &[Value::Number(10.5), Value::Nil];
 
-      let result = match assert_eq.call(&gc, &*context, values) {
+      let result = match assert_eq.call(&hooks, values) {
         NativeResult::Success(res) => res,
         NativeResult::RuntimeError(_) => panic!(),
       };

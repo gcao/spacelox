@@ -590,6 +590,14 @@ impl Chunk {
       Err(index) => self.lines[cmp::min(index, self.lines.len() - 1)].line,
     }
   }
+
+  /// Get the approximate size of this chunk in bytes
+  pub fn size(&self) -> usize {
+    mem::size_of::<Self>()
+      + mem::size_of::<u8>() * self.instructions.capacity()
+      + mem::size_of::<Value>() * self.constants.capacity()
+      + mem::size_of::<Line>() * self.lines.capacity()
+  }
 }
 
 #[cfg(test)]

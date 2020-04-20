@@ -1,7 +1,6 @@
-use spacelox_core::managed::{Managed, Trace};
-use spacelox_core::memory::Gc;
+use spacelox_core::managed::{Managed};
 use spacelox_core::native::{NativeMeta, NativeMethod, NativeResult};
-use spacelox_core::value::{ArityKind, Class, Value};
+use spacelox_core::{hooks::Hooks, value::{ArityKind, Class, Value}};
 
 pub const MAP_CLASS_NAME: &'static str = "Map";
 
@@ -10,28 +9,32 @@ const MAP_SIZE: NativeMeta = NativeMeta::new("size", ArityKind::Fixed(0));
 const MAP_HAS: NativeMeta = NativeMeta::new("has", ArityKind::Fixed(1));
 const MAP_GET: NativeMeta = NativeMeta::new("get", ArityKind::Fixed(1));
 
-pub fn create_map_class<C: Trace>(gc: &Gc, context: &C) -> Managed<Class> {
-  let name = gc.manage_str(String::from(MAP_CLASS_NAME), context);
-  let mut class = gc.manage(Class::new(name), context);
+pub fn create_map_class(hooks: &Hooks) -> Managed<Class> {
+  let name = hooks.manage_str(String::from(MAP_CLASS_NAME));
+  let mut class = hooks.manage(Class::new(name));
 
-  class.methods.insert(
-    gc.manage_str(String::from(MAP_SIZE.name), context),
-    Value::NativeMethod(gc.manage(Box::new(MapSize::new()), context)),
+  class.add_method(
+    hooks,
+    hooks.manage_str(String::from(MAP_SIZE.name)),
+    Value::NativeMethod(hooks.manage(Box::new(MapSize::new()))),
   );
 
-  class.methods.insert(
-    gc.manage_str(String::from(MAP_STR.name), context),
-    Value::NativeMethod(gc.manage(Box::new(MapStr::new()), context)),
+  class.add_method(
+    hooks,
+    hooks.manage_str(String::from(MAP_STR.name)),
+    Value::NativeMethod(hooks.manage(Box::new(MapStr::new()))),
   );
 
-  class.methods.insert(
-    gc.manage_str(String::from(MAP_HAS.name), context),
-    Value::NativeMethod(gc.manage(Box::new(MapHas::new()), context)),
+  class.add_method(
+    hooks,
+    hooks.manage_str(String::from(MAP_HAS.name)),
+    Value::NativeMethod(hooks.manage(Box::new(MapHas::new()))),
   );
 
-  class.methods.insert(
-    gc.manage_str(String::from(MAP_GET.name), context),
-    Value::NativeMethod(gc.manage(Box::new(MapGet::new()), context)),
+  class.add_method(
+    hooks,
+    hooks.manage_str(String::from(MAP_GET.name)),
+    Value::NativeMethod(hooks.manage(Box::new(MapGet::new()))),
   );
 
   class
@@ -55,8 +58,8 @@ impl NativeMethod for MapStr {
     &self.meta
   }
 
-  fn call(&self, gc: &Gc, context: &dyn Trace, this: Value, _args: &[Value]) -> NativeResult {
-    NativeResult::Success(Value::String(gc.manage_str(this.to_string(), context)))
+  fn call(&self, hooks: &Hooks, this: Value, _args: &[Value]) -> NativeResult {
+    NativeResult::Success(Value::String(hooks.manage_str(this.to_string())))
   }
 }
 
@@ -78,11 +81,10 @@ impl NativeMethod for MapSize {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, this: Value, _args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, this: Value, _args: &[Value]) -> NativeResult {
     NativeResult::Success(Value::Number(this.to_map().len() as f64))
   }
 }
-
 
 #[derive(Clone, Debug)]
 struct MapHas {
@@ -102,11 +104,10 @@ impl NativeMethod for MapHas {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, this: Value, args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, this: Value, args: &[Value]) -> NativeResult {
     NativeResult::Success(Value::Bool(this.to_map().contains_key(&args[0])))
   }
 }
-
 
 #[derive(Clone, Debug)]
 struct MapGet {
@@ -126,7 +127,7 @@ impl NativeMethod for MapGet {
     &self.meta
   }
 
-  fn call(&self, _gc: &Gc, _context: &dyn Trace, this: Value, args: &[Value]) -> NativeResult {
+  fn call(&self, _hooks: &Hooks, this: Value, args: &[Value]) -> NativeResult {
     match this.to_map().get(&args[0]) {
       Some(value) => NativeResult::Success(*value),
       None => NativeResult::Success(Value::Nil),
@@ -141,33 +142,34 @@ mod test {
   #[cfg(test)]
   mod str {
     use super::*;
+    use crate::support::{TestContext, test_native_dependencies};
     use fnv::FnvHashMap;
-    use crate::support::test_native_dependencies;
 
     #[test]
     fn new() {
       let map_str = MapStr::new();
-  
+
       assert_eq!(map_str.meta.name, "str");
       assert_eq!(map_str.meta.arity, ArityKind::Fixed(0));
     }
-  
+
     #[test]
     fn call() {
       let map_str = MapStr::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
+      
       let values = &[];
 
       let mut map = FnvHashMap::default();
       map.insert(Value::Nil, Value::Nil);
-      let this = gc.manage(map, &*context);
-  
-      let result = map_str.call(&gc, &*context, Value::Map(this), values);
+      let this = hooks.manage(map);
+
+      let result = map_str.call(&hooks, Value::Map(this), values);
       match result {
-        NativeResult::Success(r) => {
-          assert_eq!(&*r.to_str(), "{ nil: nil }")
-        },
-        NativeResult::RuntimeError(_) => assert!(false)
+        NativeResult::Success(r) => assert_eq!(&*r.to_str(), "{ nil: nil }"),
+        NativeResult::RuntimeError(_) => assert!(false),
       }
     }
   }
@@ -175,33 +177,34 @@ mod test {
   #[cfg(test)]
   mod size {
     use super::*;
+    use crate::support::{TestContext, test_native_dependencies};
     use fnv::FnvHashMap;
-    use crate::support::test_native_dependencies;
 
     #[test]
     fn new() {
       let map_str = MapSize::new();
-  
+
       assert_eq!(map_str.meta.name, "size");
       assert_eq!(map_str.meta.arity, ArityKind::Fixed(0));
     }
-  
+
     #[test]
     fn call() {
       let map_str = MapSize::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
+      
       let values = &[];
 
       let mut map = FnvHashMap::default();
       map.insert(Value::Nil, Value::Nil);
-      let this = gc.manage(map, &*context);
-  
-      let result = map_str.call(&gc, &*context, Value::Map(this), values);
+      let this = hooks.manage(map);
+
+      let result = map_str.call(&hooks, Value::Map(this), values);
       match result {
-        NativeResult::Success(r) => {
-          assert_eq!(r.to_num(), 1.0)
-        },
-        NativeResult::RuntimeError(_) => assert!(false)
+        NativeResult::Success(r) => assert_eq!(r.to_num(), 1.0),
+        NativeResult::RuntimeError(_) => assert!(false),
       }
     }
   }
@@ -209,40 +212,38 @@ mod test {
   #[cfg(test)]
   mod has {
     use super::*;
+    use crate::support::{TestContext, test_native_dependencies};
     use fnv::FnvHashMap;
-    use crate::support::test_native_dependencies;
 
     #[test]
     fn new() {
       let map_has = MapHas::new();
-  
+
       assert_eq!(map_has.meta.name, "has");
       assert_eq!(map_has.meta.arity, ArityKind::Fixed(1));
     }
-  
+
     #[test]
     fn call() {
       let map_has = MapHas::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
 
       let mut map = FnvHashMap::default();
       map.insert(Value::Nil, Value::Nil);
-      let this = gc.manage(map, &*context);
-  
-      let result = map_has.call(&gc, &*context, Value::Map(this), &[Value::Nil]);
+      let this = hooks.manage(map);
+
+      let result = map_has.call(&hooks, Value::Map(this), &[Value::Nil]);
       match result {
-        NativeResult::Success(r) => {
-          assert_eq!(r.to_bool(), true)
-        },
-        NativeResult::RuntimeError(_) => assert!(false)
+        NativeResult::Success(r) => assert_eq!(r.to_bool(), true),
+        NativeResult::RuntimeError(_) => assert!(false),
       }
 
-      let result = map_has.call(&gc, &*context, Value::Map(this), &[Value::Bool(false)]);
+      let result = map_has.call(&hooks, Value::Map(this), &[Value::Bool(false)]);
       match result {
-        NativeResult::Success(r) => {
-          assert_eq!(r.to_bool(), false)
-        },
-        NativeResult::RuntimeError(_) => assert!(false)
+        NativeResult::Success(r) => assert_eq!(r.to_bool(), false),
+        NativeResult::RuntimeError(_) => assert!(false),
       }
     }
   }
@@ -250,40 +251,38 @@ mod test {
   #[cfg(test)]
   mod get {
     use super::*;
+    use crate::support::{TestContext, test_native_dependencies};
     use fnv::FnvHashMap;
-    use crate::support::test_native_dependencies;
 
     #[test]
     fn new() {
       let map_get = MapGet::new();
-  
+
       assert_eq!(map_get.meta.name, "get");
       assert_eq!(map_get.meta.arity, ArityKind::Fixed(1));
     }
-  
+
     #[test]
     fn call() {
       let map_get = MapGet::new();
-      let (gc, context) = test_native_dependencies();
+      let gc = test_native_dependencies();
+      let mut context = TestContext::new(&gc);
+      let hooks = Hooks::new(&mut context);
 
       let mut map = FnvHashMap::default();
       map.insert(Value::Nil, Value::Bool(false));
-      let this = gc.manage(map, &*context);
-  
-      let result = map_get.call(&gc, &*context, Value::Map(this), &[Value::Nil]);
+      let this = hooks.manage(map);
+
+      let result = map_get.call(&hooks, Value::Map(this), &[Value::Nil]);
       match result {
-        NativeResult::Success(r) => {
-          assert_eq!(r.to_bool(), false)
-        },
-        NativeResult::RuntimeError(_) => assert!(false)
+        NativeResult::Success(r) => assert_eq!(r.to_bool(), false),
+        NativeResult::RuntimeError(_) => assert!(false),
       }
 
-      let result = map_get.call(&gc, &*context, Value::Map(this), &[Value::Bool(true)]);
+      let result = map_get.call(&hooks, Value::Map(this), &[Value::Bool(true)]);
       match result {
-        NativeResult::Success(r) => {
-          assert!(r.is_nil())
-        },
-        NativeResult::RuntimeError(_) => assert!(false)
+        NativeResult::Success(r) => assert!(r.is_nil()),
+        NativeResult::RuntimeError(_) => assert!(false),
       }
     }
   }

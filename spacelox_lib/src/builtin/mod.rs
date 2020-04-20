@@ -16,17 +16,17 @@ use crate::builtin::nil::create_nil_class;
 use crate::builtin::number::create_number_class;
 use crate::builtin::string::create_string_class;
 use spacelox_core::value::BuiltInClasses;
-use spacelox_core::{managed::Trace, memory::Gc};
+use spacelox_core::hooks::Hooks;
 
-pub fn make_builtin_classes<C: Trace>(gc: &Gc, context: &C) -> BuiltInClasses {
+pub fn make_builtin_classes(hooks: &Hooks) -> BuiltInClasses {
   BuiltInClasses {
-    bool: create_bool_class(gc, context),
-    nil: create_nil_class(gc, context),
-    number: create_number_class(gc, context),
-    string: create_string_class(gc, context),
-    list: create_list_class(gc, context),
-    map: create_map_class(gc, context),
-    fun: create_fun_class(gc, context),
-    native: create_native_class(gc, context),
+    bool: create_bool_class(hooks),
+    nil: create_nil_class(hooks),
+    number: create_number_class(hooks),
+    string: create_string_class(hooks),
+    list: create_list_class(hooks),
+    map: create_map_class(hooks),
+    fun: create_fun_class(hooks),
+    native: create_native_class(hooks),
   }
 }
