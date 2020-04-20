@@ -16,6 +16,7 @@ path = "src/lib.rs"
 spacelox_core = { path = "../spacelox_core", features = ['debug_stress_gc', 'debug_gc'] }
 spacelox_lib = { path = "../spacelox_lib" }
 fnv = "1.0.3"
+ordered-float = "0.5.2"
 
 [dev-dependencies]
 criterion = "0.3"
